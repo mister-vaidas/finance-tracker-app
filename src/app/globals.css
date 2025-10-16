@@ -1,26 +1,30 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Design tokens (Tailwind v4) */
+@theme {
+  --color-bg: #0B1220;
+  --color-card: #0F172A;
+  --color-ink: #E2E8F0;
+  --color-soft: #94A3B8;
+  --color-brand: #0EA5E9;
+  --color-up: #22C55E;
+  --color-down: #EF4444;
+
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  --shadow-soft: 0 10px 30px rgba(0,0,0,.25);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* Base */
+:root { color-scheme: dark; }
+html, body { height: 100%; }
+body { @apply bg-bg text-ink antialiased; }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+/* Tiny utility classes */
+.card { @apply bg-card rounded-2xl p-4 shadow-soft; }
+.btn { @apply rounded-xl px-4 py-2 font-medium bg-brand/20 hover:bg-brand/30 active:scale-[.98] transition; }
+.input { @apply w-full rounded-xl bg-bg border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-brand/50; }
+.tab { @apply flex-1 text-center py-3 rounded-xl bg-white/5 data-[active=true]:bg-brand/30; }
+.badge { @apply text-xs px-2 py-1 rounded-lg bg-white/10; }
+.text-soft { @apply text-soft; }
