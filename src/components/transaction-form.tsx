@@ -111,15 +111,29 @@ export function WithdrawFromSavings() {
     load()
 
     // live refresh on tx changes
-    const c = db.transactions.hook('creating', () => setTimeout(load, 0))
-    const u = db.transactions.hook('updating', () => setTimeout(load, 0))
-    const d = db.transactions.hook('deleting', () => setTimeout(load, 0))
-    return () => {
-      db.transactions.hook('creating').unsubscribe(c)
-      db.transactions.hook('updating').unsubscribe(u)
-      db.transactions.hook('deleting').unsubscribe(d)
-    }
-  }, [])
+    const onCreating = (pk: string, obj: Transaction, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(load, 0)
+  }
+  const onUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
+    void mods; void pk; void obj; void tx
+    setTimeout(load, 0)
+  }
+  const onDeleting = (pk: string, obj: Transaction, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(load, 0)
+  }
+
+  db.transactions.hook('creating', onCreating)
+  db.transactions.hook('updating', onUpdating)
+  db.transactions.hook('deleting', onDeleting)
+
+  return () => {
+    db.transactions.hook('creating').unsubscribe(onCreating)
+    db.transactions.hook('updating').unsubscribe(onUpdating)
+    db.transactions.hook('deleting').unsubscribe(onDeleting)
+  }
+}, [])
 
   async function withdraw() {
     const n = Number(amount)

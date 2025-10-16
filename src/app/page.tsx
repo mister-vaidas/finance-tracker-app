@@ -16,41 +16,66 @@ import { sumPortfolioValue } from '@/lib/assets'
 import type { AssetHolding } from '@/lib/types'
 import { WithdrawFromSavings } from '@/components/transaction-form'
 
+// Local type for tabs to avoid `any`
+type TabKey = 'add' | 'list' | 'reports' | 'assets'
 
-
-
-function filterByPeriod(rows: Transaction[], p: Period){
+function filterByPeriod(rows: Transaction[], p: Period) {
   const from = periodStart(p)
   if (p === 'all') return rows
   return rows.filter(r => r.date >= from.getTime())
 }
 
-function sumByKind(rows: Transaction[], kind: Transaction['kind']){
-  return rows.filter(r => r.kind === kind).reduce((a,b) => a + b.amount, 0)
+function sumByKind(rows: Transaction[], kind: Transaction['kind']) {
+  return rows.filter(r => r.kind === kind).reduce((a, b) => a + b.amount, 0)
 }
 
-
-
-export default function Page(){
-  const [tab, setTab] = useState<'add'|'list'|'reports'|'assets'>('add')
+export default function Page() {
+  const [tab, setTab] = useState<TabKey>('add')
   const [period, setPeriod] = useState<Period>('month')
   const [rows, setRows] = useState<Transaction[]>([])
 
-  async function refresh(){ setRows(await db.transactions.orderBy('date').reverse().toArray()) }
+  async function refresh() { setRows(await db.transactions.orderBy('date').reverse().toArray()) }
 
-  useEffect(()=>{ 
-    refresh()
-    const c = db.transactions.hook('creating', () => setTimeout(refresh, 0))
-    const u = db.transactions.hook('updating', () => setTimeout(refresh, 0))
-    const d = db.transactions.hook('deleting', () => setTimeout(refresh, 0))
-    return () => {
-      db.transactions.hook('creating').unsubscribe(c)
-      db.transactions.hook('updating').unsubscribe(u)
-      db.transactions.hook('deleting').unsubscribe(d)
+  useEffect(() => {
+  const refresh = async () =>
+    setRows(await db.transactions.orderBy('date').reverse().toArray())
+
+  refresh()
+
+  const onCreating = (pk: string, obj: Transaction, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(refresh, 0)
+  }
+  const onUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
+    void mods; void pk; void obj; void tx
+    setTimeout(refresh, 0)
+  }
+  const onDeleting = (pk: string, obj: Transaction, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(refresh, 0)
+  }
+
+  db.transactions.hook('creating', onCreating)
+  db.transactions.hook('updating', onUpdating)
+  db.transactions.hook('deleting', onDeleting)
+
+  return () => {
+    db.transactions.hook('creating').unsubscribe(onCreating)
+    db.transactions.hook('updating').unsubscribe(onUpdating)
+    db.transactions.hook('deleting').unsubscribe(onDeleting)
+  }
+}, [])
+
+
+
+  const sums = useMemo(() => summarize(rows, period), [rows, period])
+
+  // Type-safe onChange handler for Tabs
+  const handleTabChange = (v: string) => {
+    if (v === 'add' || v === 'list' || v === 'reports' || v === 'assets') {
+      setTab(v)
     }
-  },[])
-
-  const sums = useMemo(()=> summarize(rows, period), [rows, period])
+  }
 
   return (
     <main>
@@ -59,22 +84,26 @@ export default function Page(){
         <p className="text-soft text-sm">Private, offline-first. No logins.</p>
       </header>
 
-      <Tabs value={tab} onChange={v=>setTab(v as any)} items={[
-        { value:'add', label:'Add' },
-        { value:'list', label:'Transactions' },
-        { value:'reports', label:'Reports' },
-        { value:'assets', label:'Assets' },
-      ]} />
+      <Tabs
+        value={tab}
+        onChange={handleTabChange}
+        items={[
+          { value: 'add', label: 'Add' },
+          { value: 'list', label: 'Transactions' },
+          { value: 'reports', label: 'Reports' },
+          { value: 'assets', label: 'Assets' },
+        ]}
+      />
 
-      {tab==='add' && <AddView onPeriod={setPeriod} period={period} />}
-      {tab==='list' && <ListView rows={rows} />}
-      {tab==='reports' && <ReportsView sums={sums} period={period} onPeriod={setPeriod} />}
-      {tab==='assets' && <AssetsView />}
+      {tab === 'add' && <AddView onPeriod={setPeriod} period={period} />}
+      {tab === 'list' && <ListView rows={rows} />}
+      {tab === 'reports' && <ReportsView sums={sums} period={period} onPeriod={setPeriod} />}
+      {tab === 'assets' && <AssetsView />}
     </main>
   )
 }
 
-function AddView({ period, onPeriod }:{ period: Period, onPeriod:(p:Period)=>void }){
+function AddView({ period, onPeriod }: { period: Period, onPeriod: (p: Period) => void }) {
   const [kind, setKind] = useState<TransactionKind>('expense')
   return (
     <div>
@@ -87,53 +116,82 @@ function AddView({ period, onPeriod }:{ period: Period, onPeriod:(p:Period)=>voi
       </Section>
 
       {kind === 'saving' && <WithdrawFromSavings />}
-
     </div>
   )
 }
 
-function KindSwitch({ value, onChange }:{ value: TransactionKind, onChange:(k:TransactionKind)=>void }){
-  const options: TransactionKind[] = ['expense','income','saving']
+function KindSwitch({ value, onChange }: { value: TransactionKind, onChange: (k: TransactionKind) => void }) {
+  const options: TransactionKind[] = ['expense', 'income', 'saving']
   return (
     <div className="flex gap-2">
       {options.map(o => (
-        <button key={o} onClick={()=>onChange(o)} className="badge" data-active={o===value}>{o}</button>
+        <button key={o} onClick={() => onChange(o)} className="badge" data-active={o === value}>{o}</button>
       ))}
     </div>
   )
 }
 
-function Overview(){
+function Overview() {
   const [rows, setRows] = useState<Transaction[]>([])
   const [holdings, setHoldings] = useState<AssetHolding[]>([])
   const [period, setPeriod] = useState<Period>('month')
 
   useEffect(() => {
-    // initial load
-    db.transactions.toArray().then(setRows)
-    db.holdings.toArray().then(setHoldings)
+  // initial load
+  db.transactions.toArray().then(setRows)
+  db.holdings.toArray().then(setHoldings)
 
-    // live refresh on DB changes
-    const h1 = db.transactions.hook('creating', () => setTimeout(async () => setRows(await db.transactions.toArray()), 0))
-    const h2 = db.transactions.hook('updating', () => setTimeout(async () => setRows(await db.transactions.toArray()), 0))
-    const h3 = db.transactions.hook('deleting', () => setTimeout(async () => setRows(await db.transactions.toArray()), 0))
+  // transactions hooks
+  const tCreating = (pk: string, obj: Transaction, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(async () => setRows(await db.transactions.toArray()), 0)
+  }
+  const tUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
+    void mods; void pk; void obj; void tx
+    setTimeout(async () => setRows(await db.transactions.toArray()), 0)
+  }
+  const tDeleting = (pk: string, obj: Transaction, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(async () => setRows(await db.transactions.toArray()), 0)
+  }
 
-    const a1 = db.holdings.hook('creating', () => setTimeout(async () => setHoldings(await db.holdings.toArray()), 0))
-    const a2 = db.holdings.hook('updating', () => setTimeout(async () => setHoldings(await db.holdings.toArray()), 0))
-    const a3 = db.holdings.hook('deleting', () => setTimeout(async () => setHoldings(await db.holdings.toArray()), 0))
+  db.transactions.hook('creating', tCreating)
+  db.transactions.hook('updating', tUpdating)
+  db.transactions.hook('deleting', tDeleting)
 
-    return () => {
-      db.transactions.hook('creating').unsubscribe(h1)
-      db.transactions.hook('updating').unsubscribe(h2)
-      db.transactions.hook('deleting').unsubscribe(h3)
-      db.holdings.hook('creating').unsubscribe(a1)
-      db.holdings.hook('updating').unsubscribe(a2)
-      db.holdings.hook('deleting').unsubscribe(a3)
-    }
-  }, [])
+  // holdings hooks
+  const hCreating = (pk: string, obj: AssetHolding, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+  }
+  const hUpdating = (mods: Partial<AssetHolding>, pk: string, obj: AssetHolding, tx: unknown) => {
+    void mods; void pk; void obj; void tx
+    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+  }
+  const hDeleting = (pk: string, obj: AssetHolding, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+  }
 
-  const s = useMemo(()=> summarize(rows, period), [rows, period])
-  const portfolioValue = useMemo(()=> sumPortfolioValue(holdings), [holdings])
+  db.holdings.hook('creating', hCreating)
+  db.holdings.hook('updating', hUpdating)
+  db.holdings.hook('deleting', hDeleting)
+
+  return () => {
+    db.transactions.hook('creating').unsubscribe(tCreating)
+    db.transactions.hook('updating').unsubscribe(tUpdating)
+    db.transactions.hook('deleting').unsubscribe(tDeleting)
+    db.holdings.hook('creating').unsubscribe(hCreating)
+    db.holdings.hook('updating').unsubscribe(hUpdating)
+    db.holdings.hook('deleting').unsubscribe(hDeleting)
+  }
+}, [])
+
+
+
+
+  const s = useMemo(() => summarize(rows, period), [rows, period])
+  const portfolioValue = useMemo(() => sumPortfolioValue(holdings), [holdings])
 
   // Net Worth = Cash Balance + Portfolio Value + Savings total
   const netWorth = useMemo(() => s.balance + portfolioValue + s.saving, [s.balance, portfolioValue, s.saving])
@@ -150,22 +208,21 @@ function Overview(){
         <Stat label="Savings (total)" value={s.saving} tone="up" />
         <Stat label="Portfolio Value" value={portfolioValue} />
         <div className="col-span-2 grid grid-cols-2 gap-3">
-          <Stat label="Balance (cash)" value={s.balance} tone={s.balance>=0?'up':'down'} />
-          <Stat label="Net Worth" value={netWorth} tone={netWorth>=0?'up':'down'} />
+          <Stat label="Balance (cash)" value={s.balance} tone={s.balance >= 0 ? 'up' : 'down'} />
+          <Stat label="Net Worth" value={netWorth} tone={netWorth >= 0 ? 'up' : 'down'} />
         </div>
       </div>
     </div>
   )
 }
 
-
-function ListView({ rows }:{ rows: Transaction[] }){
+function ListView({ rows }: { rows: Transaction[] }) {
   const [list, setList] = useState<Transaction[]>(rows)
 
   // keep local list in sync when parent rows change
-  useEffect(()=> setList(rows), [rows])
+  useEffect(() => setList(rows), [rows])
 
-  async function del(id:string){
+  async function del(id: string) {
     await db.transactions.delete(id)
     // refresh local list after deletion
     const next = await db.transactions.orderBy('date').reverse().toArray()
@@ -183,54 +240,84 @@ function ListView({ rows }:{ rows: Transaction[] }){
             <div className="text-xs text-soft">{new Date(r.date).toLocaleString()}</div>
             {r.note && <div className="text-xs mt-1 opacity-80">{r.note}</div>}
           </div>
-          <div className={r.kind==='expense' ? 'text-down font-semibold' : 'text-up font-semibold'}>
-            {r.amount.toLocaleString(undefined,{ style:'currency', currency:'GBP'})}
+          <div className={r.kind === 'expense' ? 'text-down font-semibold' : 'text-up font-semibold'}>
+            {r.amount.toLocaleString(undefined, { style: 'currency', currency: 'GBP' })}
           </div>
-          <button onClick={()=>del(r.id)} className="badge">Delete</button>
+          <button onClick={() => del(r.id)} className="badge">Delete</button>
         </div>
       ))}
-      {list.length===0 && <div className="text-soft text-center mt-8">No transactions yet.</div>}
+      {list.length === 0 && <div className="text-soft text-center mt-8">No transactions yet.</div>}
     </div>
   )
 }
 
-
 function ReportsView({
   sums, period, onPeriod
-}:{ sums: ReturnType<typeof summarize>, period:Period, onPeriod:(p:Period)=>void }){
+}: { sums: ReturnType<typeof summarize>, period: Period, onPeriod: (p: Period) => void }) {
   const [tx, setTx] = useState<Transaction[]>([])
   const [holdings, setHoldings] = useState<AssetHolding[]>([])
 
-  useEffect(()=> {
-    // initial load
-    db.transactions.toArray().then(setTx)
-    db.holdings.toArray().then(setHoldings)
+  useEffect(() => {
+  // initial load
+  db.transactions.toArray().then(setTx)
+  db.holdings.toArray().then(setHoldings)
 
-    // live refresh on changes
-    const h1 = db.transactions.hook('creating', () => setTimeout(async () => setTx(await db.transactions.toArray()), 0))
-    const h2 = db.transactions.hook('updating', () => setTimeout(async () => setTx(await db.transactions.toArray()), 0))
-    const h3 = db.transactions.hook('deleting', () => setTimeout(async () => setTx(await db.transactions.toArray()), 0))
-    const a1 = db.holdings.hook('creating', () => setTimeout(async () => setHoldings(await db.holdings.toArray()), 0))
-    const a2 = db.holdings.hook('updating', () => setTimeout(async () => setHoldings(await db.holdings.toArray()), 0))
-    const a3 = db.holdings.hook('deleting', () => setTimeout(async () => setHoldings(await db.holdings.toArray()), 0))
+  // transactions hooks
+  const tCreating = (pk: string, obj: Transaction, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(async () => setTx(await db.transactions.toArray()), 0)
+  }
+  const tUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
+    void mods; void pk; void obj; void tx
+    setTimeout(async () => setTx(await db.transactions.toArray()), 0)
+  }
+  const tDeleting = (pk: string, obj: Transaction, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(async () => setTx(await db.transactions.toArray()), 0)
+  }
 
-    return () => {
-      db.transactions.hook('creating').unsubscribe(h1)
-      db.transactions.hook('updating').unsubscribe(h2)
-      db.transactions.hook('deleting').unsubscribe(h3)
-      db.holdings.hook('creating').unsubscribe(a1)
-      db.holdings.hook('updating').unsubscribe(a2)
-      db.holdings.hook('deleting').unsubscribe(a3)
-    }
-  },[])
+  db.transactions.hook('creating', tCreating)
+  db.transactions.hook('updating', tUpdating)
+  db.transactions.hook('deleting', tDeleting)
+
+  // holdings hooks
+  const hCreating = (pk: string, obj: AssetHolding, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+  }
+  const hUpdating = (mods: Partial<AssetHolding>, pk: string, obj: AssetHolding, tx: unknown) => {
+    void mods; void pk; void obj; void tx
+    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+  }
+  const hDeleting = (pk: string, obj: AssetHolding, tx: unknown) => {
+    void pk; void obj; void tx
+    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+  }
+
+  db.holdings.hook('creating', hCreating)
+  db.holdings.hook('updating', hUpdating)
+  db.holdings.hook('deleting', hDeleting)
+
+  return () => {
+    db.transactions.hook('creating').unsubscribe(tCreating)
+    db.transactions.hook('updating').unsubscribe(tUpdating)
+    db.transactions.hook('deleting').unsubscribe(tDeleting)
+    db.holdings.hook('creating').unsubscribe(hCreating)
+    db.holdings.hook('updating').unsubscribe(hUpdating)
+    db.holdings.hook('deleting').unsubscribe(hDeleting)
+  }
+}, [])
+
+
+
 
   // Live values
-  const portfolioValue = useMemo(()=> sumPortfolioValue(holdings), [holdings])
-  const netWorth = useMemo(()=> sums.balance + portfolioValue + sums.saving, [sums.balance, portfolioValue, sums.saving])
+  const portfolioValue = useMemo(() => sumPortfolioValue(holdings), [holdings])
+  const netWorth = useMemo(() => sums.balance + portfolioValue + sums.saving, [sums.balance, portfolioValue, sums.saving])
 
   // Period-scoped views
-  const txInPeriod = useMemo(()=> filterByPeriod(tx, period), [tx, period])
-  const assetPurchases = useMemo(()=> sumByKind(txInPeriod, 'asset'), [txInPeriod])
+  const txInPeriod = useMemo(() => filterByPeriod(tx, period), [tx, period])
+  const assetPurchases = useMemo(() => sumByKind(txInPeriod, 'asset'), [txInPeriod])
 
   return (
     <div className="mt-4 grid gap-4">
@@ -245,15 +332,15 @@ function ReportsView({
         <Stat label="Savings (total)" value={sums.saving} tone="up" />
         <Stat label="Portfolio Value" value={portfolioValue} />
         <div className="col-span-2 grid grid-cols-2 gap-3">
-          <Stat label="Balance (cash)" value={sums.balance} tone={sums.balance>=0?'up':'down'} />
-          <Stat label="Net Worth" value={netWorth} tone={netWorth>=0?'up':'down'} />
+          <Stat label="Balance (cash)" value={sums.balance} tone={sums.balance >= 0 ? 'up' : 'down'} />
+          <Stat label="Net Worth" value={netWorth} tone={netWorth >= 0 ? 'up' : 'down'} />
         </div>
         {/* Optional audit tile to see period asset spend */}
         <div className="col-span-2">
           <div className="card">
             <div className="text-sm text-soft">Asset Purchases (this {period})</div>
             <div className="text-xl font-semibold">
-              {assetPurchases.toLocaleString(undefined,{style:'currency', currency:'GBP'})}
+              {assetPurchases.toLocaleString(undefined, { style: 'currency', currency: 'GBP' })}
             </div>
           </div>
         </div>
@@ -269,17 +356,17 @@ function ReportsView({
       <div className="card flex flex-wrap gap-2 items-center justify-between">
         <div className="text-sm text-soft">Backup / Restore</div>
         <div className="flex gap-2">
-          <button className="btn" onClick={async()=> exportJSON(await db.transactions.toArray())}>Export JSON</button>
-          <button className="btn" onClick={async()=> exportCSV(await db.transactions.toArray())}>Export CSV</button>
+          <button className="btn" onClick={async () => exportJSON(await db.transactions.toArray())}>Export JSON</button>
+          <button className="btn" onClick={async () => exportCSV(await db.transactions.toArray())}>Export CSV</button>
           <label className="btn cursor-pointer">
             Import
             <input
               type="file"
               accept=".json,.csv"
               className="hidden"
-              onChange={async(e)=>{
+              onChange={async (e) => {
                 const f = e.target.files?.[0]
-                if(!f) return
+                if (!f) return
                 const items = await importFile(f)
                 await db.transactions.bulkPut(items)
                 location.reload()
@@ -296,17 +383,14 @@ function ReportsView({
   )
 }
 
-
-
-
-function AssetsView(){
+function AssetsView() {
   const [refreshKey, setRefreshKey] = useState(0)
   return (
     <div className="mt-4 grid gap-4">
       <div className="text-soft text-sm">
         Track your holdings (quantity, avg cost, and manual current price). Data is local/offline.
       </div>
-      <HoldingForm onAdded={()=> setRefreshKey(k => k+1)} />
+      <HoldingForm onAdded={() => setRefreshKey(k => k + 1)} />
       {/* Force list to refresh after adding */}
       <div key={refreshKey}>
         <HoldingsTable />
