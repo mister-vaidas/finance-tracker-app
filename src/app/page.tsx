@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { db } from '@/lib/db'
 import { Period, Transaction, TransactionKind } from '@/lib/types'
 import { summarize } from '@/lib/aggregate'
@@ -16,6 +16,7 @@ import { sumPortfolioValue } from '@/lib/assets'
 import type { AssetHolding } from '@/lib/types'
 import { WithdrawFromSavings } from '@/components/transaction-form'
 import InstallPWA from '@/components/InstallPWA'
+import type { Transaction as DexieTx } from 'dexie'
 
 // Local type for tabs to avoid `any`
 type TabKey = 'add' | 'list' | 'reports' | 'assets'
@@ -34,8 +35,6 @@ export default function Page() {
   const [tab, setTab] = useState<TabKey>('add')
   const [period, setPeriod] = useState<Period>('month')
   const [rows, setRows] = useState<Transaction[]>([])
-
-  async function refresh() { setRows(await db.transactions.orderBy('date').reverse().toArray()) }
 
   useEffect(() => {
     const refresh = async () =>
@@ -100,7 +99,7 @@ export default function Page() {
       />
 
       {tab === 'add' && <AddView onPeriod={setPeriod} period={period} />}
-      {tab === 'list' && <ListView rows={rows} />}
+      {tab==='list' && <ListView />}
       {tab === 'reports' && <ReportsView sums={sums} period={period} onPeriod={setPeriod} />}
       {tab === 'assets' && <AssetsView />}
     </main>
@@ -220,40 +219,105 @@ function Overview() {
   )
 }
 
-function ListView({ rows }: { rows: Transaction[] }) {
-  const [list, setList] = useState<Transaction[]>(rows)
+function ListView(){
+  const PAGE_SIZE = 20
+  const [page, setPage] = useState(0)
+  const [rows, setRows] = useState<Transaction[]>([])
+  const [total, setTotal] = useState(0)
 
-  // keep local list in sync when parent rows change
-  useEffect(() => setList(rows), [rows])
+  const load = useCallback(async (p = page) => {
+    const cnt = await db.transactions.count()
+    const data = await db.transactions
+      .orderBy('date')        // newest first
+      .reverse()
+      .offset(p * PAGE_SIZE)
+      .limit(PAGE_SIZE)
+      .toArray()
 
-  async function del(id: string) {
+    setTotal(cnt)
+    setRows(data)
+  }, [page])
+
+  // initial load
+  useEffect(() => {
+    setPage(0)
+    void load(0)
+  }, [load])
+
+  // live refresh when DB changes (typed hooks, no any)
+  useEffect(() => {
+    const refreshSoon = () => setTimeout(() => void load(page), 0)
+
+    const onCreating = (_pk: string, _obj: Transaction, _tx: DexieTx) => {
+      // silence no-unused-vars without disabling rules:
+      void _pk; void _obj; void _tx
+      refreshSoon()
+    }
+    const onUpdating = (_mods: Partial<Transaction>, _pk: string, _obj: Transaction, _tx: DexieTx) => {
+      void _mods; void _pk; void _obj; void _tx
+      refreshSoon()
+    }
+    const onDeleting = (_pk: string, _obj: Transaction, _tx: DexieTx) => {
+      void _pk; void _obj; void _tx
+      refreshSoon()
+    }
+
+    db.transactions.hook('creating', onCreating)
+    db.transactions.hook('updating', onUpdating)
+    db.transactions.hook('deleting', onDeleting)
+
+    return () => {
+      db.transactions.hook('creating').unsubscribe(onCreating)
+      db.transactions.hook('updating').unsubscribe(onUpdating)
+      db.transactions.hook('deleting').unsubscribe(onDeleting)
+    }
+  }, [page, load])
+
+  async function del(id:string){
     await db.transactions.delete(id)
-    // refresh local list after deletion
-    const next = await db.transactions.orderBy('date').reverse().toArray()
-    setList(next)
+    const maxPage = Math.max(0, Math.ceil((total - 1) / PAGE_SIZE) - 1)
+    const nextPage = Math.min(page, maxPage)
+    if (nextPage !== page) setPage(nextPage)
+    void load(nextPage)
   }
+
+  const maxPageIndex = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1)
 
   return (
     <div className="grid gap-3 mt-4">
-      {list.map(r => (
+      {rows.map(r => (
         <div key={r.id} className="card flex items-center justify-between">
           <div>
             <div className="text-sm capitalize">
               {r.kind} · <span className="text-soft">{r.category}</span>
             </div>
-            <div className="text-xs text-soft">{new Date(r.date).toLocaleString()}</div>
+            <div className="text-xs text-soft">
+              {new Date(r.date).toLocaleString()}
+            </div>
             {r.note && <div className="text-xs mt-1 opacity-80">{r.note}</div>}
           </div>
-          <div className={r.kind === 'expense' ? 'text-down font-semibold' : 'text-up font-semibold'}>
-            {r.amount.toLocaleString(undefined, { style: 'currency', currency: 'GBP' })}
+          <div className={(r.kind==='expense' || r.kind==='asset') ? 'text-down font-semibold' : 'text-up font-semibold'}>
+            {r.amount.toLocaleString(undefined,{ style:'currency', currency:'GBP'})}
           </div>
-          <button onClick={() => del(r.id)} className="badge">Delete</button>
+          <button onClick={()=>void del(r.id)} className="badge">Delete</button>
         </div>
       ))}
-      {list.length === 0 && <div className="text-soft text-center mt-8">No transactions yet.</div>}
+      {rows.length===0 && <div className="text-soft text-center mt-8">No transactions on this page.</div>}
+
+      <div className="flex items-center justify-between mt-2">
+        <div className="text-xs text-soft">
+          Page {page+1} / {maxPageIndex+1} • {total} total
+        </div>
+        <div className="flex gap-2">
+          <button className="badge" disabled={page<=0} onClick={()=>{ const p=page-1; setPage(p); void load(p) }}>Prev</button>
+          <button className="badge" disabled={page>=maxPageIndex} onClick={()=>{ const p=page+1; setPage(p); void load(p) }}>Next</button>
+        </div>
+      </div>
     </div>
   )
 }
+
+
 
 function ReportsView({
   sums, period, onPeriod
