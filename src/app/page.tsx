@@ -15,6 +15,7 @@ import HoldingsTable from '@/components/assets/holdings-table'
 import { sumPortfolioValue } from '@/lib/assets'
 import type { AssetHolding } from '@/lib/types'
 import { WithdrawFromSavings } from '@/components/transaction-form'
+import InstallPWA from '@/components/InstallPWA'
 
 // Local type for tabs to avoid `any`
 type TabKey = 'add' | 'list' | 'reports' | 'assets'
@@ -37,34 +38,34 @@ export default function Page() {
   async function refresh() { setRows(await db.transactions.orderBy('date').reverse().toArray()) }
 
   useEffect(() => {
-  const refresh = async () =>
-    setRows(await db.transactions.orderBy('date').reverse().toArray())
+    const refresh = async () =>
+      setRows(await db.transactions.orderBy('date').reverse().toArray())
 
-  refresh()
+    refresh()
 
-  const onCreating = (pk: string, obj: Transaction, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(refresh, 0)
-  }
-  const onUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
-    void mods; void pk; void obj; void tx
-    setTimeout(refresh, 0)
-  }
-  const onDeleting = (pk: string, obj: Transaction, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(refresh, 0)
-  }
+    const onCreating = (pk: string, obj: Transaction, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(refresh, 0)
+    }
+    const onUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
+      void mods; void pk; void obj; void tx
+      setTimeout(refresh, 0)
+    }
+    const onDeleting = (pk: string, obj: Transaction, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(refresh, 0)
+    }
 
-  db.transactions.hook('creating', onCreating)
-  db.transactions.hook('updating', onUpdating)
-  db.transactions.hook('deleting', onDeleting)
+    db.transactions.hook('creating', onCreating)
+    db.transactions.hook('updating', onUpdating)
+    db.transactions.hook('deleting', onDeleting)
 
-  return () => {
-    db.transactions.hook('creating').unsubscribe(onCreating)
-    db.transactions.hook('updating').unsubscribe(onUpdating)
-    db.transactions.hook('deleting').unsubscribe(onDeleting)
-  }
-}, [])
+    return () => {
+      db.transactions.hook('creating').unsubscribe(onCreating)
+      db.transactions.hook('updating').unsubscribe(onUpdating)
+      db.transactions.hook('deleting').unsubscribe(onDeleting)
+    }
+  }, [])
 
 
 
@@ -79,9 +80,12 @@ export default function Page() {
 
   return (
     <main>
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold">Finance</h1>
-        <p className="text-soft text-sm">Private, offline-first. No logins.</p>
+      <header className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Finance</h1>
+          <p className="text-soft text-sm">Private, offline-first. No logins.</p>
+        </div>
+        <InstallPWA />
       </header>
 
       <Tabs
@@ -137,55 +141,55 @@ function Overview() {
   const [period, setPeriod] = useState<Period>('month')
 
   useEffect(() => {
-  // initial load
-  db.transactions.toArray().then(setRows)
-  db.holdings.toArray().then(setHoldings)
+    // initial load
+    db.transactions.toArray().then(setRows)
+    db.holdings.toArray().then(setHoldings)
 
-  // transactions hooks
-  const tCreating = (pk: string, obj: Transaction, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(async () => setRows(await db.transactions.toArray()), 0)
-  }
-  const tUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
-    void mods; void pk; void obj; void tx
-    setTimeout(async () => setRows(await db.transactions.toArray()), 0)
-  }
-  const tDeleting = (pk: string, obj: Transaction, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(async () => setRows(await db.transactions.toArray()), 0)
-  }
+    // transactions hooks
+    const tCreating = (pk: string, obj: Transaction, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(async () => setRows(await db.transactions.toArray()), 0)
+    }
+    const tUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
+      void mods; void pk; void obj; void tx
+      setTimeout(async () => setRows(await db.transactions.toArray()), 0)
+    }
+    const tDeleting = (pk: string, obj: Transaction, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(async () => setRows(await db.transactions.toArray()), 0)
+    }
 
-  db.transactions.hook('creating', tCreating)
-  db.transactions.hook('updating', tUpdating)
-  db.transactions.hook('deleting', tDeleting)
+    db.transactions.hook('creating', tCreating)
+    db.transactions.hook('updating', tUpdating)
+    db.transactions.hook('deleting', tDeleting)
 
-  // holdings hooks
-  const hCreating = (pk: string, obj: AssetHolding, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
-  }
-  const hUpdating = (mods: Partial<AssetHolding>, pk: string, obj: AssetHolding, tx: unknown) => {
-    void mods; void pk; void obj; void tx
-    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
-  }
-  const hDeleting = (pk: string, obj: AssetHolding, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
-  }
+    // holdings hooks
+    const hCreating = (pk: string, obj: AssetHolding, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+    }
+    const hUpdating = (mods: Partial<AssetHolding>, pk: string, obj: AssetHolding, tx: unknown) => {
+      void mods; void pk; void obj; void tx
+      setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+    }
+    const hDeleting = (pk: string, obj: AssetHolding, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+    }
 
-  db.holdings.hook('creating', hCreating)
-  db.holdings.hook('updating', hUpdating)
-  db.holdings.hook('deleting', hDeleting)
+    db.holdings.hook('creating', hCreating)
+    db.holdings.hook('updating', hUpdating)
+    db.holdings.hook('deleting', hDeleting)
 
-  return () => {
-    db.transactions.hook('creating').unsubscribe(tCreating)
-    db.transactions.hook('updating').unsubscribe(tUpdating)
-    db.transactions.hook('deleting').unsubscribe(tDeleting)
-    db.holdings.hook('creating').unsubscribe(hCreating)
-    db.holdings.hook('updating').unsubscribe(hUpdating)
-    db.holdings.hook('deleting').unsubscribe(hDeleting)
-  }
-}, [])
+    return () => {
+      db.transactions.hook('creating').unsubscribe(tCreating)
+      db.transactions.hook('updating').unsubscribe(tUpdating)
+      db.transactions.hook('deleting').unsubscribe(tDeleting)
+      db.holdings.hook('creating').unsubscribe(hCreating)
+      db.holdings.hook('updating').unsubscribe(hUpdating)
+      db.holdings.hook('deleting').unsubscribe(hDeleting)
+    }
+  }, [])
 
 
 
@@ -258,55 +262,55 @@ function ReportsView({
   const [holdings, setHoldings] = useState<AssetHolding[]>([])
 
   useEffect(() => {
-  // initial load
-  db.transactions.toArray().then(setTx)
-  db.holdings.toArray().then(setHoldings)
+    // initial load
+    db.transactions.toArray().then(setTx)
+    db.holdings.toArray().then(setHoldings)
 
-  // transactions hooks
-  const tCreating = (pk: string, obj: Transaction, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(async () => setTx(await db.transactions.toArray()), 0)
-  }
-  const tUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
-    void mods; void pk; void obj; void tx
-    setTimeout(async () => setTx(await db.transactions.toArray()), 0)
-  }
-  const tDeleting = (pk: string, obj: Transaction, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(async () => setTx(await db.transactions.toArray()), 0)
-  }
+    // transactions hooks
+    const tCreating = (pk: string, obj: Transaction, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(async () => setTx(await db.transactions.toArray()), 0)
+    }
+    const tUpdating = (mods: Partial<Transaction>, pk: string, obj: Transaction, tx: unknown) => {
+      void mods; void pk; void obj; void tx
+      setTimeout(async () => setTx(await db.transactions.toArray()), 0)
+    }
+    const tDeleting = (pk: string, obj: Transaction, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(async () => setTx(await db.transactions.toArray()), 0)
+    }
 
-  db.transactions.hook('creating', tCreating)
-  db.transactions.hook('updating', tUpdating)
-  db.transactions.hook('deleting', tDeleting)
+    db.transactions.hook('creating', tCreating)
+    db.transactions.hook('updating', tUpdating)
+    db.transactions.hook('deleting', tDeleting)
 
-  // holdings hooks
-  const hCreating = (pk: string, obj: AssetHolding, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
-  }
-  const hUpdating = (mods: Partial<AssetHolding>, pk: string, obj: AssetHolding, tx: unknown) => {
-    void mods; void pk; void obj; void tx
-    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
-  }
-  const hDeleting = (pk: string, obj: AssetHolding, tx: unknown) => {
-    void pk; void obj; void tx
-    setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
-  }
+    // holdings hooks
+    const hCreating = (pk: string, obj: AssetHolding, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+    }
+    const hUpdating = (mods: Partial<AssetHolding>, pk: string, obj: AssetHolding, tx: unknown) => {
+      void mods; void pk; void obj; void tx
+      setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+    }
+    const hDeleting = (pk: string, obj: AssetHolding, tx: unknown) => {
+      void pk; void obj; void tx
+      setTimeout(async () => setHoldings(await db.holdings.toArray()), 0)
+    }
 
-  db.holdings.hook('creating', hCreating)
-  db.holdings.hook('updating', hUpdating)
-  db.holdings.hook('deleting', hDeleting)
+    db.holdings.hook('creating', hCreating)
+    db.holdings.hook('updating', hUpdating)
+    db.holdings.hook('deleting', hDeleting)
 
-  return () => {
-    db.transactions.hook('creating').unsubscribe(tCreating)
-    db.transactions.hook('updating').unsubscribe(tUpdating)
-    db.transactions.hook('deleting').unsubscribe(tDeleting)
-    db.holdings.hook('creating').unsubscribe(hCreating)
-    db.holdings.hook('updating').unsubscribe(hUpdating)
-    db.holdings.hook('deleting').unsubscribe(hDeleting)
-  }
-}, [])
+    return () => {
+      db.transactions.hook('creating').unsubscribe(tCreating)
+      db.transactions.hook('updating').unsubscribe(tUpdating)
+      db.transactions.hook('deleting').unsubscribe(tDeleting)
+      db.holdings.hook('creating').unsubscribe(hCreating)
+      db.holdings.hook('updating').unsubscribe(hUpdating)
+      db.holdings.hook('deleting').unsubscribe(hDeleting)
+    }
+  }, [])
 
 
 
